@@ -1,0 +1,28 @@
+{
+  "name": "custom-check-examples",
+  "version": "1.0.0",
+  "description": "A Netlify Function that uses graphql-eslint to implement a Custom Check integration",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "netlify dev",
+    "prestart": "npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@apollo/client": "^3.11.4",
+    "@eslint/compat": "^1.1.1",
+    "@eslint/js": "^9.9.0",
+    "@graphql-eslint/eslint-plugin": "^4.0.0-alpha.4",
+    "@netlify/functions": "^2.8.1",
+    "eslint": "^9.9.0",
+    "graphql": "^16.9.0"
+  },
+  "devDependencies": {
+    "@types/eslint": "^9.6.0",
+    "json-schema-to-ts": "^3.1.0",
+    "typescript": "^5.5.4"
+  }
+}
