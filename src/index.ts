@@ -7,7 +7,7 @@ import type { Config, Context } from "@netlify/functions";
 const linter = new Linter({cwd: '.',});
 
 const apolloClient = new ApolloClient({
-    uri: Netlify.env.get('APOLLO_STUDIO_URL') ?? 'https://graphql.api.apollographql.com/api/graphql',
+    uri: Netlify.env.get('APOLLO_STUDIO_URL') ?? 'https://api.apollographql.com/api/graphql',
     cache: new InMemoryCache(),
 });
 
@@ -21,9 +21,7 @@ const docQuery = gql`query Doc($graphId: ID!, $hash: SHA256) {
 
 const customCheckCallbackMutation = gql`mutation CustomCheckCallback($input: CustomCheckCallbackInput!, $name: String!, $graphId: ID!) {
   graph(id: $graphId) {
-    id
     variant(name: $name) {
-      id
       customCheckCallback(input: $input) {
         __typename
         ... on CustomCheckResult {
@@ -95,6 +93,25 @@ export default async (req: Request, context: Context) => {
 
     console.log(`eslint messages: ${JSON.stringify(messages)}`);
 
+    const violations = messages.map(violation => ({
+      // Fail check if a naming convention is violated
+      level: violation.ruleId === '@graphql-eslint/naming-convention' ? 'ERROR' : 'WARNING',
+      message: violation.message,
+      rule: violation.ruleId ?? 'unknown',
+      sourceLocations: {
+        start: {
+          byteOffset: 0,
+          line: violation.line,
+          column: violation.column,
+        },
+        end: {
+          byteOffset: 0,
+          line: violation.endLine,
+          column: violation.endColumn,
+        }
+      }
+    }));
+
     const callbackResult = await apolloClient.mutate({
       mutation: customCheckCallbackMutation,
         variables: {
@@ -103,24 +120,8 @@ export default async (req: Request, context: Context) => {
           input: {
             taskId: event.checkStep.taskId,
             workflowId: event.checkStep.workflowId,
-            status: 'SUCCESS',
-            violations: messages.map(violation => ({
-              level: "WARNING",
-              message: violation.message,
-              rule: violation.ruleId,
-              sourceLocations: {
-                start: {
-                  byteOffset: violation.column,
-                  line: violation.line,
-                  column: violation.column,
-                },
-                end: {
-                  byteOffset: violation.endColumn,
-                  line: violation.endLine,
-                  column: violation.endColumn,
-                }
-              }
-            })),
+            status: violations.find(violation => violation.level === 'ERROR') !== undefined ? 'FAILURE' : 'SUCCESS',
+            violations: violations,
           }
         },
         context: {
