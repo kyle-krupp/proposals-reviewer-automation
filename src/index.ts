@@ -70,6 +70,8 @@ export default async (req: Request, context: Context) => {
       context: {
         headers: {
           "Content-Type": "application/json",
+          "apollographql-client-name": "custom-checks-example",
+          "apollographql-client-version": "0.0.1",
           "x-api-key": apiKey
         }
       }
@@ -127,6 +129,8 @@ export default async (req: Request, context: Context) => {
         context: {
           headers: {
             "Content-Type": "application/json",
+            "apollographql-client-name": "custom-checks-example",
+            "apollographql-client-version": "0.0.1",
             "x-api-key": apiKey
           }
         }
