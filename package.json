@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "start": "netlify dev",
-    "prestart": "npm run build"
+    "prestart": "npm run prettier:check ; npm run build",
+    "prettier:write": "npx prettier . --write",
+    "prettier:check": "npx prettier . --check"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@types/eslint": "^9.6.0",
     "json-schema-to-ts": "^3.1.0",
+    "prettier": "3.3.3",
     "typescript": "^5.5.4"
   }
 }

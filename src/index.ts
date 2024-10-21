@@ -17,8 +17,8 @@ function getSourceLocationCoordiante(
   return {
     line,
     column,
-    byteOffset: [...lines.slice(0, -1), lastLine.slice(0, column)].join('\n')
-      .length - 1,
+    byteOffset:
+      [...lines.slice(0, -1), lastLine.slice(0, column)].join('\n').length - 1,
   };
 }
 
@@ -198,12 +198,12 @@ export default async (req: Request, context: Context) => {
                     start: startSourceLocationCoordiante,
                     end:
                       typeof violation.endLine === 'number' &&
-                        typeof violation.endColumn === 'number'
+                      typeof violation.endColumn === 'number'
                         ? getSourceLocationCoordiante(
-                          code,
-                          violation.endLine,
-                          violation.endColumn,
-                        )
+                            code,
+                            violation.endLine,
+                            violation.endColumn,
+                          )
                         : startSourceLocationCoordiante,
                   },
                 ],
