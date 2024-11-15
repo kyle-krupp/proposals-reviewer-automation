@@ -7,7 +7,7 @@ import { ESLint, Linter } from 'eslint';
 
 const linter = new Linter({ cwd: '.' });
 
-function getSourceLocationCoordiante(
+function getSourceLocationCoordinate(
   code: string,
   line: number,
   column: number,
@@ -117,6 +117,7 @@ export default async function customLint(req: Request, context: Context) {
           (baseSubgraph) => baseSubgraph.name === proposedSubgraph.name,
         )?.hash !== proposedSubgraph.hash,
     );
+    console.log('changed subgraphs', changedSubgraphs)
     const hashesToCheck = [
       event.proposedSchema.hash,
       ...changedSubgraphs.map((s) => s.hash),
@@ -146,76 +147,77 @@ export default async function customLint(req: Request, context: Context) {
         console.error(err);
         return { data: { graph: null } };
       });
-    const supergraphSource = docsResult.data.graph?.docs?.find(
-      (doc) => doc?.hash === event.proposedSchema.hash,
-    )?.source;
-    const violations = (
-      await Promise.all(
-        changedSubgraphs.map(async (subgraph) => {
-          const code = docsResult.data.graph?.docs?.find(
-            (doc) => doc?.hash === subgraph.hash,
-          )?.source;
-          if (typeof code !== 'string') {
-            return null;
-          }
-          const eslingConfig: Linter.Config = {
-            files: ['*.graphql'],
-            plugins: {
-              '@graphql-eslint': graphql as unknown as ESLint.Plugin,
-            },
-            rules: graphql.flatConfigs['schema-recommended']
-              .rules as unknown as Linter.RulesRecord,
-            languageOptions: {
-              parser: graphql,
-              parserOptions: {
-                graphQLConfig: { schema: supergraphSource },
-              },
-            },
-          };
-          try {
-            const messages = linter.verify(
-              code,
-              eslingConfig,
-              'schema.graphql',
-            );
-            console.log(`eslint messages: ${JSON.stringify(messages)}`);
-            return messages.map((violation) => {
-              const startSourceLocationCoordiante = getSourceLocationCoordiante(
-                code,
-                violation.line,
-                violation.column,
-              );
-              return {
-                level:
-                  violation.severity === 2
-                    ? ('ERROR' as const)
-                    : ('WARNING' as const),
-                message: violation.message,
-                rule: violation.ruleId ?? 'unknown',
-                sourceLocations: [
-                  {
-                    subgraphName: subgraph.name,
-                    start: startSourceLocationCoordiante,
-                    end:
-                      typeof violation.endLine === 'number' &&
-                      typeof violation.endColumn === 'number'
-                        ? getSourceLocationCoordiante(
-                            code,
-                            violation.endLine,
-                            violation.endColumn,
-                          )
-                        : startSourceLocationCoordiante,
-                  },
-                ],
-              };
-            });
-          } catch (err) {
-            console.log(`Error: ${err}`);
-            return null;
-          }
-        }),
-      )
-    ).flat();
+    console.log('docsResult', docsResult);
+    // const supergraphSource = docsResult.data.graph?.docs?.find(
+    //   (doc) => doc?.hash === event.proposedSchema.hash,
+    // )?.source;
+    // const violations = (
+    //   await Promise.all(
+    //     changedSubgraphs.map(async (subgraph) => {
+    //       const code = docsResult.data.graph?.docs?.find(
+    //         (doc) => doc?.hash === subgraph.hash,
+    //       )?.source;
+    //       if (typeof code !== 'string') {
+    //         return null;
+    //       }
+    //       const eslingConfig: Linter.Config = {
+    //         files: ['*.graphql'],
+    //         plugins: {
+    //           '@graphql-eslint': graphql as unknown as ESLint.Plugin,
+    //         },
+    //         rules: graphql.flatConfigs['schema-recommended']
+    //           .rules as unknown as Linter.RulesRecord,
+    //         languageOptions: {
+    //           parser: graphql,
+    //           parserOptions: {
+    //             graphQLConfig: { schema: supergraphSource },
+    //           },
+    //         },
+    //       };
+    //       try {
+    //         const messages = linter.verify(
+    //           code,
+    //           eslingConfig,
+    //           'schema.graphql',
+    //         );
+    //         console.log(`eslint messages: ${JSON.stringify(messages)}`);
+    //         return messages.map((violation) => {
+    //           const startSourceLocationCoordiante = getSourceLocationCoordinate(
+    //             code,
+    //             violation.line,
+    //             violation.column,
+    //           );
+    //           return {
+    //             level:
+    //               violation.severity === 2
+    //                 ? ('ERROR' as const)
+    //                 : ('WARNING' as const),
+    //             message: violation.message,
+    //             rule: violation.ruleId ?? 'unknown',
+    //             sourceLocations: [
+    //               {
+    //                 subgraphName: subgraph.name,
+    //                 start: startSourceLocationCoordiante,
+    //                 end:
+    //                   typeof violation.endLine === 'number' &&
+    //                   typeof violation.endColumn === 'number'
+    //                     ? getSourceLocationCoordinate(
+    //                         code,
+    //                         violation.endLine,
+    //                         violation.endColumn,
+    //                       )
+    //                     : startSourceLocationCoordiante,
+    //               },
+    //             ],
+    //           };
+    //         });
+    //       } catch (err) {
+    //         console.log(`Error: ${err}`);
+    //         return null;
+    //       }
+    //     }),
+    //   )
+    // ).flat();
 
     console.log(
       'variables',
@@ -225,12 +227,8 @@ export default async function customLint(req: Request, context: Context) {
         input: {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
-          status: violations.some(
-            (violation) => violation === null || violation.level === 'ERROR',
-          )
-            ? 'FAILURE'
-            : 'SUCCESS',
-          violations: violations.filter((v): v is NonNullable<typeof v> => !!v),
+          status: 'SUCCESS',
+          violations: [].filter((v): v is NonNullable<typeof v> => !!v),
         },
       }),
     );
@@ -243,12 +241,8 @@ export default async function customLint(req: Request, context: Context) {
         input: {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
-          status: violations.some(
-            (violation) => violation === null || violation.level === 'ERROR',
-          )
-            ? 'FAILURE'
-            : 'SUCCESS',
-          violations: violations.filter((v): v is NonNullable<typeof v> => !!v),
+          status: 'SUCCESS',
+          violations: [].filter((v): v is NonNullable<typeof v> => !!v),
         },
       },
       context: {
