@@ -263,7 +263,9 @@ export default async function customLint(req: Request, context: Context) {
         });
 
         return violations;
-    });
+    }).flat();
+
+
 
     console.log(
       'variables',
@@ -273,7 +275,11 @@ export default async function customLint(req: Request, context: Context) {
         input: {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
-          status: 'SUCCESS',
+          status: violationResults.some(
+            (violation) => violation === null || violation.level === 'WARNING',
+          )
+            ? 'FAILURE'
+            : 'SUCCESS',
           violations: violationResults,
         },
       }),
@@ -287,7 +293,11 @@ export default async function customLint(req: Request, context: Context) {
         input: {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
-          status: 'SUCCESS',
+          status: violationResults.some(
+            (violation) => violation === null || violation.level === 'WARNING',
+          )
+            ? 'FAILURE'
+            : 'SUCCESS',
           violations: violationResults,
         },
       },
