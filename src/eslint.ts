@@ -158,83 +158,111 @@ export default async function customLint(req: Request, context: Context) {
     )?.source;
     console.log(supergraphSource);
 
-    const violationResults = changedSubgraphs.map((subgraph) => {
-      const code = docsResult.data.graph?.docs?.find(
-        (doc) => doc?.hash === subgraph.hash,
-      )?.source;
-      if (typeof code !== 'string') {
-        return null;
-      }
+    const violationResults = changedSubgraphs
+      .map((subgraph) => {
+        const code = docsResult.data.graph?.docs?.find(
+          (doc) => doc?.hash === subgraph.hash,
+        )?.source;
+        if (typeof code !== 'string') {
+          return null;
+        }
 
-      const violations = [];
+        const violations = [];
 
-      const parsedSchema = parse(code);
-      console.log('parsedSchema', parsedSchema);
-      const schemaDefinition = parsedSchema.definitions.find(
-        (doc) => doc.kind === 'SchemaDefinition' || doc.kind === 'SchemaExtension',
-      );
-      console.log('schemaDefinition', schemaDefinition);
-      const contactSchemaDirective = schemaDefinition?.directives?.find(
-        (directive) => directive.name.value === 'contact',
-      );
+        const parsedSchema = parse(code);
+        console.log('parsedSchema', parsedSchema);
+        const schemaDefinition = parsedSchema.definitions.find(
+          (doc) =>
+            doc.kind === 'SchemaDefinition' || doc.kind === 'SchemaExtension',
+        );
+        console.log('schemaDefinition', schemaDefinition);
+        const contactSchemaDirective = schemaDefinition?.directives?.find(
+          (directive) => directive.name.value === 'contact',
+        );
 
-      if (!contactSchemaDirective) {
-        return {
-          level: 'WARNING' as const,
-          message: 'Subgraphs must contain a contact directive',
-          rule: 'Must contain a properly formatted @contact directive for each subgraph',
-        };
-      }
+        if (!contactSchemaDirective) {
+          return {
+            level: 'WARNING' as const,
+            message: 'Subgraphs must contain a contact directive',
+            rule: 'Must contain a properly formatted @contact directive for each subgraph',
+          };
+        }
 
-      const contactSchemaFields = contactSchemaDirective?.arguments?.map(
-        (argu) => ({
-          field: argu.name.value,
-          value: (argu.value as StringValueNode).value,
-        }),
-      );
+        const contactSchemaFields = contactSchemaDirective?.arguments?.map(
+          (argu) => ({
+            field: argu.name.value,
+            value: (argu.value as StringValueNode).value,
+          }),
+        );
 
-      const allFieldsHaveValues = contactSchemaFields?.every(
-        ({ field, value }) => Boolean(field) && Boolean(value),
-      );
-      const contactSchemaFieldNames = contactSchemaFields?.map(
-        (field) => field.field,
-      );
-      const hasAllRequiredFields = ['name', 'url', 'description'].every(
-        (fieldName) => contactSchemaFieldNames?.includes(fieldName),
-      );
+        const allFieldsHaveValues = contactSchemaFields?.every(
+          ({ field, value }) => Boolean(field) && Boolean(value),
+        );
+        const contactSchemaFieldNames = contactSchemaFields?.map(
+          (field) => field.field,
+        );
+        const hasAllRequiredFields = ['name', 'url', 'description'].every(
+          (fieldName) => contactSchemaFieldNames?.includes(fieldName),
+        );
 
-      if (!hasAllRequiredFields)
-        violations.push({
-          level: 'WARNING' as const,
-          message: 'Contact directive must have a name, url, and description',
-          rule: 'Must contain a properly formatted @contact directive for each subgraph',
-          sourceLocations: [
-            {
-              subgraphName: subgraph.name,
-              start: contactSchemaDirective.loc?.start,
-              end: contactSchemaDirective.loc?.end
-            },
-          ],
-        });
+        const startLocationCoordinate = getSourceLocationCoordinate(
+          code,
+          schemaDefinition?.loc?.startToken.line as number,
+          schemaDefinition?.loc?.startToken.column as number,
+        );
+        console.log('startLocationCoordinate', startLocationCoordinate);
 
-      if (!allFieldsHaveValues)
-        violations.push({
-          level: 'WARNING' as const,
-          message: 'Contact directive values are not all present',
-          rule: 'Must contain a properly formatted @contact directive for each subgraph',
-          sourceLocations: [
-            {
-              subgraphName: subgraph.name,
-              start: contactSchemaDirective.loc?.start,
-              end: contactSchemaDirective.loc?.end
-            },
-          ],
-        });
+        const endLocationCoordinate = getSourceLocationCoordinate(
+          code,
+          schemaDefinition?.loc?.endToken.line as number,
+          schemaDefinition?.loc?.endToken.column as number,
+        );
+        console.log('endLocationCoordinate', endLocationCoordinate);
+
+        if (!hasAllRequiredFields)
+          violations.push({
+            level: 'WARNING' as const,
+            message: 'Contact directive must have a name, url, and description',
+            rule: 'Must contain a properly formatted @contact directive for each subgraph',
+            sourceLocations: [
+              {
+                subgraphName: subgraph.name,
+                start: startLocationCoordinate,
+                end: endLocationCoordinate || startLocationCoordinate,
+              },
+            ],
+          });
+
+        if (!allFieldsHaveValues) {
+          const startLocationCoordinate = getSourceLocationCoordinate(
+            code,
+            schemaDefinition?.loc?.startToken.line as number,
+            schemaDefinition?.loc?.startToken.column as number,
+          );
+
+          const endLocationCoordinate = getSourceLocationCoordinate(
+            code,
+            schemaDefinition?.loc?.endToken.line as number,
+            schemaDefinition?.loc?.endToken.column as number,
+          );
+
+          violations.push({
+            level: 'WARNING' as const,
+            message: 'Contact directive values are not all present',
+            rule: 'Must contain a properly formatted @contact directive for each subgraph',
+            sourceLocations: [
+              {
+                subgraphName: subgraph.name,
+                start: startLocationCoordinate,
+                end: endLocationCoordinate || startLocationCoordinate,
+              },
+            ],
+          });
+        }
 
         return violations;
-    }).flat();
-
-
+      })
+      .flat();
 
     console.log(
       'variables',
