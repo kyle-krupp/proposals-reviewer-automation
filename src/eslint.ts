@@ -147,7 +147,7 @@ export default async function customLint(req: Request, context: Context) {
         console.error(err);
         return { data: { graph: null } };
       });
-    console.log('docsResult', docsResult);
+    console.log('docsResult', docsResult.data.graph?.docs);
     // const supergraphSource = docsResult.data.graph?.docs?.find(
     //   (doc) => doc?.hash === event.proposedSchema.hash,
     // )?.source;
