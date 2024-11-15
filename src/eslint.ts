@@ -171,7 +171,7 @@ export default async function customLint(req: Request, context: Context) {
       const parsedSchema = parse(code);
       console.log('parsedSchema', parsedSchema);
       const schemaDefinition = parsedSchema.definitions.find(
-        (doc) => doc.kind === 'SchemaDefinition',
+        (doc) => doc.kind === 'SchemaDefinition' || doc.kind === 'SchemaExtension',
       );
       console.log('schemaDefinition', schemaDefinition);
       const contactSchemaDirective = schemaDefinition?.directives?.find(
