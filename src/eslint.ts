@@ -158,9 +158,6 @@ export default async function customLint(req: Request, context: Context) {
     )?.source;
     console.log(supergraphSource);
 
-    const checkForOwnershipDirective = supergraphSource?.includes('@contact'); // Contact directive exists! YAY!
-    console.log('checkForOwnershipDirective', checkForOwnershipDirective);
-
     const violationResults = changedSubgraphs.map((subgraph) => {
       const code = docsResult.data.graph?.docs?.find(
         (doc) => doc?.hash === subgraph.hash,
@@ -172,9 +169,11 @@ export default async function customLint(req: Request, context: Context) {
       const violations = [];
 
       const parsedSchema = parse(code);
+      console.log('parsedSchema', parsedSchema);
       const schemaDefinition = parsedSchema.definitions.find(
         (doc) => doc.kind === 'SchemaDefinition',
       );
+      console.log('schemaDefinition', schemaDefinition);
       const contactSchemaDirective = schemaDefinition?.directives?.find(
         (directive) => directive.name.value === 'contact',
       );
