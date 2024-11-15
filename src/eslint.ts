@@ -1,18 +1,9 @@
 import crypto from 'crypto';
-import {
-  print,
-  isSpecifiedScalarType,
-  isSpecifiedDirective,
-  parse,
-  StringValueNode,
-} from 'graphql';
+import { ConstDirectiveNode, parse, StringValueNode } from 'graphql';
 import { ApolloClient, InMemoryCache, gql } from '@apollo/client/core/core.cjs';
-import * as graphql from '@graphql-eslint/eslint-plugin';
-import type { Config, Context } from '@netlify/functions';
-import { ESLint, Linter } from 'eslint';
+import type { Context } from '@netlify/functions';
 
-const linter = new Linter({ cwd: '.' });
-
+// Get coordinate info to display line error
 function getSourceLocationCoordinate(
   code: string,
   line: number,
@@ -28,6 +19,31 @@ function getSourceLocationCoordinate(
   };
 }
 
+const getSourceLocationInformation = (
+  subgraph: Record<string, string>,
+  code: string,
+  contactSchemaDirective: ConstDirectiveNode,
+) => {
+  const startLocationCoordinate = getSourceLocationCoordinate(
+    code,
+    contactSchemaDirective?.loc?.startToken.line as number,
+    contactSchemaDirective?.loc?.startToken.column as number,
+  );
+
+  const endLocationCoordinate = getSourceLocationCoordinate(
+    code,
+    contactSchemaDirective?.loc?.endToken.line as number,
+    contactSchemaDirective?.loc?.endToken.column as number,
+  );
+
+  return {
+    subgraphName: subgraph.name,
+    start: startLocationCoordinate,
+    end: endLocationCoordinate || startLocationCoordinate,
+  };
+};
+
+// Setup Apollo Client
 const apolloClient = new ApolloClient({
   uri:
     Netlify.env.get('APOLLO_STUDIO_URL') ??
@@ -36,7 +52,7 @@ const apolloClient = new ApolloClient({
 });
 
 const docsQuery = gql`
-  query CustomChecksExampleDocs($graphId: ID!, $hashes: [SHA256!]!) {
+  query SourceCode($graphId: ID!, $hashes: [SHA256!]!) {
     graph(id: $graphId) {
       docs(hashes: $hashes) {
         hash
@@ -102,33 +118,36 @@ interface Payload {
   };
 }
 
-export default async function customLint(req: Request, context: Context) {
-  const hmacSecret = Netlify.env.get('APOLLO_HMAC_TOKEN') || '';
-  const apiKey = Netlify.env.get('APOLLO_API_KEY') || '';
-
-  const payload = (await req.text()) || '{}';
-  console.log(`Payload: ${payload}`);
+// Determine if headers match
+const isAuthorized = async (req: Request, payload: string) => {
   const providedSignature = req.headers.get('x-apollo-signature');
 
+  const hmacSecret = Netlify.env.get('APOLLO_HMAC_TOKEN') || '';
   const hmac = crypto.createHmac('sha256', hmacSecret);
   hmac.update(payload);
   const calculatedSignature = `sha256=${hmac.digest('hex')}`;
 
-  if (providedSignature === calculatedSignature) {
+  return providedSignature === calculatedSignature;
+};
+
+export default async function customLint(req: Request, context: Context) {
+  const apiKey = Netlify.env.get('APOLLO_API_KEY') || '';
+  const payload = (await req.text()) || '{}';
+  const shouldProceed = await isAuthorized(req, payload);
+
+  // Checks for authorized request
+  if (shouldProceed) {
     const event = JSON.parse(payload) as Payload;
-    console.log(`Handling taskId: ${event.checkStep.taskId}`);
+
+    // Determine changed subgraphs
     const changedSubgraphs = (event.proposedSchema.subgraphs ?? []).filter(
       (proposedSubgraph) =>
         event.baseSchema.subgraphs?.find(
           (baseSubgraph) => baseSubgraph.name === proposedSubgraph.name,
         )?.hash !== proposedSubgraph.hash,
     );
-    console.log('changed subgraphs', changedSubgraphs);
-    const hashesToCheck = [
-      event.proposedSchema.hash,
-      ...changedSubgraphs.map((s) => s.hash),
-    ];
-    console.log(`fetching: ${hashesToCheck}`);
+
+    // Get schemas for proposal and changed subgraphs
     const docsResult = await apolloClient
       .query<{
         graph: null | {
@@ -138,7 +157,10 @@ export default async function customLint(req: Request, context: Context) {
         query: docsQuery,
         variables: {
           graphId: event.checkStep.graphId,
-          hashes: hashesToCheck,
+          hashes: [
+            event.proposedSchema.hash,
+            ...changedSubgraphs.map((s) => s.hash),
+          ],
         },
         context: {
           headers: {
@@ -153,11 +175,8 @@ export default async function customLint(req: Request, context: Context) {
         console.error(err);
         return { data: { graph: null } };
       });
-    const supergraphSource = docsResult.data.graph?.docs?.find(
-      (doc) => doc?.hash === event.proposedSchema.hash,
-    )?.source;
-    console.log(supergraphSource);
 
+    // Determine if any contactDirectiveSchema violations exist
     const violationResults = changedSubgraphs
       .map((subgraph) => {
         const code = docsResult.data.graph?.docs?.find(
@@ -175,14 +194,13 @@ export default async function customLint(req: Request, context: Context) {
           (doc) =>
             doc.kind === 'SchemaDefinition' || doc.kind === 'SchemaExtension',
         );
-        console.log('schemaDefinition', schemaDefinition);
         const contactSchemaDirective = schemaDefinition?.directives?.find(
           (directive) => directive.name.value === 'contact',
         );
 
         if (!contactSchemaDirective) {
           return {
-            level: 'WARNING' as const,
+            level: 'ERROR' as const,
             message: 'Subgraphs must contain a contact directive',
             rule: 'Must contain a properly formatted @contact directive for each subgraph',
           };
@@ -205,58 +223,26 @@ export default async function customLint(req: Request, context: Context) {
           (fieldName) => contactSchemaFieldNames?.includes(fieldName),
         );
 
-        const startLocationCoordinate = getSourceLocationCoordinate(
+        const { subgraphName, start, end } = getSourceLocationInformation(
+          subgraph,
           code,
-          contactSchemaDirective?.loc?.startToken.line as number,
-          contactSchemaDirective?.loc?.startToken.column as number,
+          contactSchemaDirective,
         );
-        console.log('startLocationCoordinate', startLocationCoordinate);
-
-        const endLocationCoordinate = getSourceLocationCoordinate(
-          code,
-          contactSchemaDirective?.loc?.endToken.line as number,
-          contactSchemaDirective?.loc?.endToken.column as number,
-        );
-        console.log('endLocationCoordinate', endLocationCoordinate);
 
         if (!hasAllRequiredFields)
           violations.push({
-            level: 'WARNING' as const,
+            level: 'ERROR' as const,
             message: 'Contact directive must have a name, url, and description',
             rule: 'Must contain a properly formatted @contact directive for each subgraph',
-            sourceLocations: [
-              {
-                subgraphName: subgraph.name,
-                start: startLocationCoordinate,
-                end: endLocationCoordinate || startLocationCoordinate,
-              },
-            ],
+            sourceLocations: [{ subgraphName, start, end }],
           });
 
         if (!allFieldsHaveValues) {
-          const startLocationCoordinate = getSourceLocationCoordinate(
-            code,
-            schemaDefinition?.loc?.startToken.line as number,
-            schemaDefinition?.loc?.startToken.column as number,
-          );
-
-          const endLocationCoordinate = getSourceLocationCoordinate(
-            code,
-            schemaDefinition?.loc?.endToken.line as number,
-            schemaDefinition?.loc?.endToken.column as number,
-          );
-
           violations.push({
-            level: 'WARNING' as const,
+            level: 'ERROR' as const,
             message: 'Contact directive values are not all present',
             rule: 'Must contain a properly formatted @contact directive for each subgraph',
-            sourceLocations: [
-              {
-                subgraphName: subgraph.name,
-                start: startLocationCoordinate,
-                end: endLocationCoordinate || startLocationCoordinate,
-              },
-            ],
+            sourceLocations: [{ subgraphName, start, end }],
           });
         }
 
@@ -264,24 +250,8 @@ export default async function customLint(req: Request, context: Context) {
       })
       .flat();
 
-    console.log(
-      'variables',
-      JSON.stringify({
-        graphId: event.checkStep.graphId,
-        name: event.checkStep.graphVariant,
-        input: {
-          taskId: event.checkStep.taskId,
-          workflowId: event.checkStep.workflowId,
-          status: violationResults.some(
-            (violation) => violation === null || violation.level === 'WARNING',
-          )
-            ? 'FAILURE'
-            : 'SUCCESS',
-          violations: violationResults,
-        },
-      }),
-    );
-    const callbackResult = await apolloClient.mutate({
+    // Send the result to Apollo Studio
+    await apolloClient.mutate({
       mutation: customCheckCallbackMutation,
       errorPolicy: 'all',
       variables: {
@@ -291,7 +261,7 @@ export default async function customLint(req: Request, context: Context) {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
           status: violationResults.some(
-            (violation) => violation === null || violation.level === 'WARNING',
+            (violation) => violation === null || violation.level === 'ERROR',
           )
             ? 'FAILURE'
             : 'SUCCESS',
@@ -307,12 +277,8 @@ export default async function customLint(req: Request, context: Context) {
         },
       },
     });
-    console.log(
-      JSON.stringify(`Callback results: ${JSON.stringify(callbackResult)}`),
-    );
     return new Response('OK', { status: 200 });
   } else {
-    console.log('signature invalid');
     return new Response('Signature is invalid', { status: 403 });
   }
 }
