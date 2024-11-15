@@ -8,7 +8,8 @@
     "start": "netlify dev",
     "prestart": "npm run prettier:check ; npm run build",
     "prettier:write": "npx prettier . --write",
-    "prettier:check": "npx prettier . --check"
+    "prettier:check": "npx prettier . --check",
+    "check": "tsx ./src/checkForContact.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,7 +21,8 @@
     "@graphql-eslint/eslint-plugin": "^4.0.0-alpha.4",
     "@netlify/functions": "^2.8.1",
     "eslint": "^9.9.0",
-    "graphql": "^16.9.0"
+    "graphql": "^16.9.0",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/eslint": "^9.6.0",

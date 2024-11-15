@@ -1,5 +1,11 @@
 import crypto from 'crypto';
-
+import {
+  print,
+  isSpecifiedScalarType,
+  isSpecifiedDirective,
+  parse,
+  StringValueNode,
+} from 'graphql';
 import { ApolloClient, InMemoryCache, gql } from '@apollo/client/core/core.cjs';
 import * as graphql from '@graphql-eslint/eslint-plugin';
 import type { Config, Context } from '@netlify/functions';
@@ -117,7 +123,7 @@ export default async function customLint(req: Request, context: Context) {
           (baseSubgraph) => baseSubgraph.name === proposedSubgraph.name,
         )?.hash !== proposedSubgraph.hash,
     );
-    console.log('changed subgraphs', changedSubgraphs)
+    console.log('changed subgraphs', changedSubgraphs);
     const hashesToCheck = [
       event.proposedSchema.hash,
       ...changedSubgraphs.map((s) => s.hash),
@@ -147,77 +153,118 @@ export default async function customLint(req: Request, context: Context) {
         console.error(err);
         return { data: { graph: null } };
       });
-    console.log('docsResult', docsResult.data.graph?.docs);
-    // const supergraphSource = docsResult.data.graph?.docs?.find(
-    //   (doc) => doc?.hash === event.proposedSchema.hash,
-    // )?.source;
-    // const violations = (
-    //   await Promise.all(
-    //     changedSubgraphs.map(async (subgraph) => {
-    //       const code = docsResult.data.graph?.docs?.find(
-    //         (doc) => doc?.hash === subgraph.hash,
-    //       )?.source;
-    //       if (typeof code !== 'string') {
-    //         return null;
-    //       }
-    //       const eslingConfig: Linter.Config = {
-    //         files: ['*.graphql'],
-    //         plugins: {
-    //           '@graphql-eslint': graphql as unknown as ESLint.Plugin,
-    //         },
-    //         rules: graphql.flatConfigs['schema-recommended']
-    //           .rules as unknown as Linter.RulesRecord,
-    //         languageOptions: {
-    //           parser: graphql,
-    //           parserOptions: {
-    //             graphQLConfig: { schema: supergraphSource },
-    //           },
-    //         },
-    //       };
-    //       try {
-    //         const messages = linter.verify(
-    //           code,
-    //           eslingConfig,
-    //           'schema.graphql',
-    //         );
-    //         console.log(`eslint messages: ${JSON.stringify(messages)}`);
-    //         return messages.map((violation) => {
-    //           const startSourceLocationCoordiante = getSourceLocationCoordinate(
-    //             code,
-    //             violation.line,
-    //             violation.column,
-    //           );
-    //           return {
-    //             level:
-    //               violation.severity === 2
-    //                 ? ('ERROR' as const)
-    //                 : ('WARNING' as const),
-    //             message: violation.message,
-    //             rule: violation.ruleId ?? 'unknown',
-    //             sourceLocations: [
-    //               {
-    //                 subgraphName: subgraph.name,
-    //                 start: startSourceLocationCoordiante,
-    //                 end:
-    //                   typeof violation.endLine === 'number' &&
-    //                   typeof violation.endColumn === 'number'
-    //                     ? getSourceLocationCoordinate(
-    //                         code,
-    //                         violation.endLine,
-    //                         violation.endColumn,
-    //                       )
-    //                     : startSourceLocationCoordiante,
-    //               },
-    //             ],
-    //           };
-    //         });
-    //       } catch (err) {
-    //         console.log(`Error: ${err}`);
-    //         return null;
-    //       }
-    //     }),
-    //   )
-    // ).flat();
+    const supergraphSource = docsResult.data.graph?.docs?.find(
+      (doc) => doc?.hash === event.proposedSchema.hash,
+    )?.source;
+    console.log(supergraphSource);
+
+    const checkForOwnershipDirective = supergraphSource?.includes('@contact'); // Contact directive exists! YAY!
+    console.log('checkForOwnershipDirective', checkForOwnershipDirective);
+
+    const violationResults = changedSubgraphs.map((subgraph) => {
+      const code = docsResult.data.graph?.docs?.find(
+        (doc) => doc?.hash === subgraph.hash,
+      )?.source;
+      if (typeof code !== 'string') {
+        return null;
+      }
+
+      const violations = [];
+
+      const parsedSchema = parse(code);
+      const schemaDefinition = parsedSchema.definitions.find(
+        (doc) => doc.kind === 'SchemaDefinition',
+      );
+      const contactSchemaDirective = schemaDefinition?.directives?.find(
+        (directive) => directive.name.value === 'contact',
+      );
+
+      if (!contactSchemaDirective) {
+        return {
+          level: 'WARNING' as const,
+          message: 'Subgraphs must contain a contact directive',
+          rule: 'Must contain a properly formatted @contact directive for each subgraph',
+          // sourceLocations: [
+          //   {
+          //     subgraphName: subgraph.name,
+          //     start: startSourceLocationCoordiante,
+          //     end:
+          //       typeof violation.endLine === 'number' &&
+          //       typeof violation.endColumn === 'number'
+          //         ? getSourceLocationCoordinate(
+          //             code,
+          //             violation.endLine,
+          //             violation.endColumn,
+          //           )
+          //         : startSourceLocationCoordiante,
+          //   },
+          // ],
+        };
+      }
+
+      const contactSchemaFields = contactSchemaDirective?.arguments?.map(
+        (argu) => ({
+          field: argu.name.value,
+          value: (argu.value as StringValueNode).value,
+        }),
+      );
+
+      const allFieldsHaveValues = contactSchemaFields?.every(
+        ({ field, value }) => Boolean(field) && Boolean(value),
+      );
+      const contactSchemaFieldNames = contactSchemaFields?.map(
+        (field) => field.field,
+      );
+      const hasAllRequiredFields = ['name', 'url', 'description'].every(
+        (fieldName) => contactSchemaFieldNames?.includes(fieldName),
+      );
+
+      if (!hasAllRequiredFields)
+        violations.push({
+          level: 'WARNING' as const,
+          message: 'Contact directive must have a name, url, and description',
+          rule: 'Must contain a properly formatted @contact directive for each subgraph',
+          // sourceLocations: [
+          //   {
+          //     subgraphName: subgraph.name,
+          //     start: startSourceLocationCoordiante,
+          //     end:
+          //       typeof violation.endLine === 'number' &&
+          //       typeof violation.endColumn === 'number'
+          //         ? getSourceLocationCoordinate(
+          //             code,
+          //             violation.endLine,
+          //             violation.endColumn,
+          //           )
+          //         : startSourceLocationCoordiante,
+          //   },
+          // ],
+        });
+
+      if (!allFieldsHaveValues)
+        violations.push({
+          level: 'WARNING' as const,
+          message: 'Contact directive values are not all present',
+          rule: 'Must contain a properly formatted @contact directive for each subgraph',
+          // sourceLocations: [
+          //   {
+          //     subgraphName: subgraph.name,
+          //     start: startSourceLocationCoordiante,
+          //     end:
+          //       typeof violation.endLine === 'number' &&
+          //       typeof violation.endColumn === 'number'
+          //         ? getSourceLocationCoordinate(
+          //             code,
+          //             violation.endLine,
+          //             violation.endColumn,
+          //           )
+          //         : startSourceLocationCoordiante,
+          //   },
+          // ],
+        });
+
+        return violations;
+    });
 
     console.log(
       'variables',
@@ -228,7 +275,7 @@ export default async function customLint(req: Request, context: Context) {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
           status: 'SUCCESS',
-          violations: [].filter((v): v is NonNullable<typeof v> => !!v),
+          violations: violationResults,
         },
       }),
     );
@@ -242,7 +289,7 @@ export default async function customLint(req: Request, context: Context) {
           taskId: event.checkStep.taskId,
           workflowId: event.checkStep.workflowId,
           status: 'SUCCESS',
-          violations: [].filter((v): v is NonNullable<typeof v> => !!v),
+          violations: violationResults,
         },
       },
       context: {
