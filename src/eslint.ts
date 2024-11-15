@@ -207,15 +207,15 @@ export default async function customLint(req: Request, context: Context) {
 
         const startLocationCoordinate = getSourceLocationCoordinate(
           code,
-          schemaDefinition?.loc?.startToken.line as number,
-          schemaDefinition?.loc?.startToken.column as number,
+          contactSchemaDirective?.loc?.startToken.line as number,
+          contactSchemaDirective?.loc?.startToken.column as number,
         );
         console.log('startLocationCoordinate', startLocationCoordinate);
 
         const endLocationCoordinate = getSourceLocationCoordinate(
           code,
-          schemaDefinition?.loc?.endToken.line as number,
-          schemaDefinition?.loc?.endToken.column as number,
+          contactSchemaDirective?.loc?.endToken.line as number,
+          contactSchemaDirective?.loc?.endToken.column as number,
         );
         console.log('endLocationCoordinate', endLocationCoordinate);
 
