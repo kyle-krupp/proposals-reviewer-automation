@@ -183,21 +183,6 @@ export default async function customLint(req: Request, context: Context) {
           level: 'WARNING' as const,
           message: 'Subgraphs must contain a contact directive',
           rule: 'Must contain a properly formatted @contact directive for each subgraph',
-          // sourceLocations: [
-          //   {
-          //     subgraphName: subgraph.name,
-          //     start: startSourceLocationCoordiante,
-          //     end:
-          //       typeof violation.endLine === 'number' &&
-          //       typeof violation.endColumn === 'number'
-          //         ? getSourceLocationCoordinate(
-          //             code,
-          //             violation.endLine,
-          //             violation.endColumn,
-          //           )
-          //         : startSourceLocationCoordiante,
-          //   },
-          // ],
         };
       }
 
@@ -223,21 +208,13 @@ export default async function customLint(req: Request, context: Context) {
           level: 'WARNING' as const,
           message: 'Contact directive must have a name, url, and description',
           rule: 'Must contain a properly formatted @contact directive for each subgraph',
-          // sourceLocations: [
-          //   {
-          //     subgraphName: subgraph.name,
-          //     start: startSourceLocationCoordiante,
-          //     end:
-          //       typeof violation.endLine === 'number' &&
-          //       typeof violation.endColumn === 'number'
-          //         ? getSourceLocationCoordinate(
-          //             code,
-          //             violation.endLine,
-          //             violation.endColumn,
-          //           )
-          //         : startSourceLocationCoordiante,
-          //   },
-          // ],
+          sourceLocations: [
+            {
+              subgraphName: subgraph.name,
+              start: contactSchemaDirective.loc?.start,
+              end: contactSchemaDirective.loc?.end
+            },
+          ],
         });
 
       if (!allFieldsHaveValues)
@@ -245,21 +222,13 @@ export default async function customLint(req: Request, context: Context) {
           level: 'WARNING' as const,
           message: 'Contact directive values are not all present',
           rule: 'Must contain a properly formatted @contact directive for each subgraph',
-          // sourceLocations: [
-          //   {
-          //     subgraphName: subgraph.name,
-          //     start: startSourceLocationCoordiante,
-          //     end:
-          //       typeof violation.endLine === 'number' &&
-          //       typeof violation.endColumn === 'number'
-          //         ? getSourceLocationCoordinate(
-          //             code,
-          //             violation.endLine,
-          //             violation.endColumn,
-          //           )
-          //         : startSourceLocationCoordiante,
-          //   },
-          // ],
+          sourceLocations: [
+            {
+              subgraphName: subgraph.name,
+              start: contactSchemaDirective.loc?.start,
+              end: contactSchemaDirective.loc?.end
+            },
+          ],
         });
 
         return violations;
