@@ -97,7 +97,6 @@ interface Payload {
 }
 
 export default async function customLint(req: Request, context: Context) {
-  console.log('Starting custom lint');
   const hmacSecret = Netlify.env.get('APOLLO_HMAC_TOKEN') || '';
   const apiKey = Netlify.env.get('APOLLO_API_KEY') || '';
 
