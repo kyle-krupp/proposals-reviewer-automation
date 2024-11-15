@@ -265,6 +265,7 @@ export default async function customLint(req: Request, context: Context) {
     );
     return new Response('OK', { status: 200 });
   } else {
+    console.log('signature invalid');
     return new Response('Signature is invalid', { status: 403 });
   }
 }
