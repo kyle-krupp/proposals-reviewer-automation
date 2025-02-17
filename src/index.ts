@@ -1,10 +1,8 @@
-import customLint from './eslint';
-//import pullRequestCheck from './github';
+import applyReviewers from './proposals';
 import type { Config } from '@netlify/functions';
 
-export default customLint;
-//export default pullRequestCheck;
+export default applyReviewers;
 
 export const config: Config = {
-  path: '/custom-check',
+  path: '/apply-reviewers',
 };
