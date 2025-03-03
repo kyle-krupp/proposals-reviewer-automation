@@ -63,7 +63,7 @@ const pullRequestQuery = gql`
   }
 `;
 
-export default async function pullRequestCheck(req: Request, context: Context) {
+async function pullRequestCheck(req: Request, context: Context) {
   const hmacSecret = Netlify.env.get('APOLLO_HMAC_TOKEN') || '';
   const apiKey = Netlify.env.get('APOLLO_API_KEY') || '';
 

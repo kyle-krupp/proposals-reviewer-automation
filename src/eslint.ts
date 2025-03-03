@@ -131,6 +131,7 @@ const isAuthorized = async (req: Request, payload: string) => {
 };
 
 export default async function customLint(req: Request, context: Context) {
+  console.log('invoked');
   const apiKey = Netlify.env.get('APOLLO_API_KEY') || '';
   const payload = (await req.text()) || '{}';
   const shouldProceed = await isAuthorized(req, payload);

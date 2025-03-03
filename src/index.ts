@@ -1,5 +1,5 @@
-import applyReviewers from './proposals';
 import type { Config } from '@netlify/functions';
+import applyReviewers from './proposals';
 
 export default applyReviewers;
 
