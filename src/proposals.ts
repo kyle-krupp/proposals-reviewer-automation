@@ -10,6 +10,27 @@ const apolloClient = new ApolloClient({
   cache: new InMemoryCache(),
 });
 
+enum ProposalStatus {
+  OPEN = 'OPEN',
+  DRAFT = 'DRAFT',
+  IMPLEMENTED = 'IMPLEMENTED',
+  APPROVED = 'APPROVED',
+}
+
+interface ProposalNotificationEvent {
+  "eventType": string;
+  "eventId": string;
+  "graphId": string;
+  "variantId": string;
+  "proposalId": string;
+  "change": {
+    "status": ProposalStatus | undefined
+    "previousStatus": ProposalStatus | undefined
+    "revisionId": string | undefined
+  },
+  "timestamp": string;
+}
+
 const schemaHashesQuery = gql`
   query SchemaHashes($graphId: ID!, $name: String!) {
     graph(id: $graphId) {
@@ -121,7 +142,6 @@ async function getSchemaHashes(variantId: string, graphId: string) {
     if (ProposalRevisionLaunch == null) {
       console.log('ProposalRevisionLaunch is null, retrying...');
       await delay(2000);
-      await delay(2000);
       return getSchemaHashes(variantId, graphId);
     }
 
@@ -223,55 +243,35 @@ async function setReviewer(variantId: string, graphId: string, ownerEmail: strin
   }
 }
 
-// TODO: Implement isAuthorized function
-// const isAuthorized = async (req: Request, payload: string) => {
-//   const providedSignature = req.headers.get('x-apollo-signature');
-//
-//   console.log(`PAYLOAD: ${payload}`);
-//   const hmacSecret = Netlify.env.get('APOLLO_HMAC_TOKEN') || '';
-//   console.log('HMAC Secret:', hmacSecret);
-//   const hmac = crypto.createHmac('sha256', hmacSecret);
-//   const payloadString = typeof payload === 'string' ? payload : JSON.stringify(payload);
-//   hmac.update(payloadString);
-//   const calculatedSignature = `sha256=${hmac.digest('hex')}`;
-//
-//   return providedSignature === calculatedSignature;
-// };
+const isAuthorized = async (req: Request, payload: string) => {
+  const providedSignature = req.headers.get('x-apollo-signature');
+
+  const hmacSecret = Netlify.env.get('APOLLO_HMAC_TOKEN') || '';
+  const hmac = crypto.createHmac('sha256', hmacSecret);
+  hmac.update(payload);
+  const calculatedSignature = `sha256=${hmac.digest('hex')}`;
+
+  return providedSignature === calculatedSignature;
+};
 
 
 export default async function applyReviewers(req: Request, context: Context): Promise<void> {
+
   const payload = (await req.text()) || '{}';
+  const shouldProceed = await isAuthorized(req, payload);
 
-  // TODO: Uncomment the following line after implementing isAuthorized function
-    const proposalNotificationEvent = JSON.parse(payload) as ProposalNotificationEvent;
+  if (!shouldProceed) {
+    console.error('Unauthorized request');
+    return;
+  }
 
-    const schemaHashes = await getSchemaHashes(proposalNotificationEvent.variantId, proposalNotificationEvent.graphId);
+  const proposalNotificationEvent = JSON.parse(payload) as ProposalNotificationEvent;
 
-    // this is  not instanteous. this needs to be repeadetly called until the schema is updated
-   // also all queries should have fetchPolicy: 'no-cache'
+  const schemaHashes = await getSchemaHashes(proposalNotificationEvent.variantId, proposalNotificationEvent.graphId);
 
-    const ownerEmail = await getImpactedOwners(schemaHashes, proposalNotificationEvent.graphId);
+  const ownerEmail = await getImpactedOwners(schemaHashes, proposalNotificationEvent.graphId);
 
-    await setReviewer(proposalNotificationEvent.variantId, proposalNotificationEvent.graphId, ownerEmail);
+  await setReviewer(proposalNotificationEvent.variantId, proposalNotificationEvent.graphId, ownerEmail);
 }
 
-enum ProposalStatus {
-  OPEN = 'OPEN',
-  DRAFT = 'DRAFT',
-  IMPLEMENTED = 'IMPLEMENTED',
-  APPROVED = 'APPROVED',
-}
 
-interface ProposalNotificationEvent {
-  "eventType": string;
-  "eventId": string;
-  "graphId": string;
-  "variantId": string;
-  "proposalId": string;
-  "change": {
-    "status": ProposalStatus | undefined
-    "previousStatus": ProposalStatus | undefined
-    "revisionId": string | undefined
-  },
-  "timestamp": string;
-}
